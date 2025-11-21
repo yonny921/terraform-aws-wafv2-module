@@ -8,27 +8,27 @@ module "ip_sets" {
     # Ip sets para bloqueo de IPs maliciosas.
     "Black_List_Custom_Backend" = {
       description = "IPs maliciosas bloqueadas manualmente"
-      addresses = ["203.0.113.0/24"] #lista de IPs maliciosas
+      addresses   = ["203.0.113.0/24"] #lista de IPs maliciosas
     },
     # Ip sets para permitir IPs confiables.
     "White_List_Custom_Backend" = {
       description = "IPs confiables permitidas manualmente"
-      addresses = ["198.51.100.55/32"] #lista de IPs confiables
+      addresses   = ["198.51.100.55/32"] #lista de IPs confiables
     }
   }
 }
 
 # 2. LLAMADA AL MÓDULO DE LOGS WAF
 module "waf_logging" {
-  source = "../../modules/waf-logs"
-  waf_arns = module.waf_acl.web_acl_arns 
+  source   = "../../modules/waf-logs"
+  waf_arns = module.waf_acl.web_acl_arns
 
   logging_configs = {
     #map para crear configuración de logs por WAF
     "wafv2-Backend" = {
       enabled          = true
       destination_arns = ["arn:aws:logs:us-east-1:123456789012:log-group:aws-waf-logs-prod"] # Reemplazar con el ARN real del grupo de logs. Se debe crear previamente.
-      
+
       redacted_fields = {
         headers      = ["Authorization", "X-Auth-Token"] # Ocultar secretos
         cookies      = ["session_id"]
@@ -42,14 +42,14 @@ module "waf_logging" {
 # 3. LLAMADA AL MÓDULO WAF ACL
 
 module "waf_acl" {
-  source = "../../modules/waf-acl"
+  source            = "../../modules/waf-acl"
   ip_set_references = module.ip_sets.arn_map
 
   web_acls_config = {
     #map para crear múltiples WAFs
     "wafv2-Backend" = {
-      scope       = "REGIONAL" #REGIONAL o CLOUDFRONT
-      description = "WAFv2 de prueba IAC"
+      scope          = "REGIONAL" #REGIONAL o CLOUDFRONT
+      description    = "WAFv2 de prueba IAC"
       default_action = "ALLOW"
 
       tags = {
@@ -70,56 +70,56 @@ module "waf_acl" {
       managed_rules = {
 
         "AWS-Admin-protection" = {
-          priority      = 40
-          vendor_name   = "AWS"
-          rule_set_name = "AWSManagedRulesAdminProtectionRuleSet"
-          metric_name   = "aws-admin-protection"
+          priority       = 40
+          vendor_name    = "AWS"
+          rule_set_name  = "AWSManagedRulesAdminProtectionRuleSet"
+          metric_name    = "aws-admin-protection"
           rule_overrides = {}
         }
 
         "AWS-Linux-Rule-Set" = {
-          priority      = 50
-          vendor_name   = "AWS"
-          rule_set_name = "AWSManagedRulesLinuxRuleSet"
-          metric_name   = "aws-linux-rule-set"
+          priority       = 50
+          vendor_name    = "AWS"
+          rule_set_name  = "AWSManagedRulesLinuxRuleSet"
+          metric_name    = "aws-linux-rule-set"
           rule_overrides = {}
         }
 
         "AWS-PHP-Rule-Set" = {
-          priority      = 60
-          vendor_name   = "AWS"
-          rule_set_name = "AWSManagedRulesPHPRuleSet"
-          metric_name   = "aws-php-rule-set"
+          priority       = 60
+          vendor_name    = "AWS"
+          rule_set_name  = "AWSManagedRulesPHPRuleSet"
+          metric_name    = "aws-php-rule-set"
           rule_overrides = {}
         }
 
         "AWS-Unix-Rule-Set" = {
-          priority      = 70
-          vendor_name   = "AWS"
-          rule_set_name = "AWSManagedRulesUnixRuleSet"
-          metric_name   = "aws-unix-rule-set"
+          priority       = 70
+          vendor_name    = "AWS"
+          rule_set_name  = "AWSManagedRulesUnixRuleSet"
+          metric_name    = "aws-unix-rule-set"
           rule_overrides = {}
         }
 
         "AWS-SQLi" = {
-          priority      = 80
-          vendor_name   = "AWS"
-          rule_set_name = "AWSManagedRulesSQLiRuleSet"
-          metric_name   = "aws-sqli-metrics"
+          priority       = 80
+          vendor_name    = "AWS"
+          rule_set_name  = "AWSManagedRulesSQLiRuleSet"
+          metric_name    = "aws-sqli-metrics"
           rule_overrides = {}
           excluded_paths = {
-            "/api/legacy/"    = "STARTS_WITH" # Excluye todo lo que empiece por aquí
-            "/login.php"      = "EXACTLY"     # Excluye SOLO este archivo exacto
-            "debug-mode"      = "CONTAINS"    # Excluye si la URL contiene esta palabra (CUIDADO con este)
-            "/static/images"  = "STARTS_WITH" 
+            "/api/legacy/"   = "STARTS_WITH" # Excluye todo lo que empiece por aquí
+            "/login.php"     = "EXACTLY"     # Excluye SOLO este archivo exacto
+            "debug-mode"     = "CONTAINS"    # Excluye si la URL contiene esta palabra (CUIDADO con este)
+            "/static/images" = "STARTS_WITH"
           }
         },
 
         "AWS-WordPress-Rule-Set" = {
-          priority      = 90
-          vendor_name   = "AWS"
-          rule_set_name = "AWSManagedRulesWordPressRuleSet"
-          metric_name   = "aws-wordpress-rule-set"
+          priority       = 90
+          vendor_name    = "AWS"
+          rule_set_name  = "AWSManagedRulesWordPressRuleSet"
+          metric_name    = "aws-wordpress-rule-set"
           rule_overrides = {}
         }
       }
@@ -149,7 +149,7 @@ module "waf_acl" {
           priority    = 30
           action      = "allow"
           metric_name = "custom-ip-allow"
-          ip_set_key  = "White_List_Custom_Backend" 
+          ip_set_key  = "White_List_Custom_Backend"
         }
       }
     }

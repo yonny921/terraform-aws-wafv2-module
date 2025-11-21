@@ -22,7 +22,7 @@ resource "aws_wafv2_web_acl" "this" {
 
   visibility_config {
     cloudwatch_metrics_enabled = each.value.visibility_config.cloudwatch_metrics_enabled
-    metric_name = each.value.visibility_config.metric_name != null ? each.value.visibility_config.metric_name : "${each.key}-metrics" # Default Metric Name Dinamico
+    metric_name                = each.value.visibility_config.metric_name != null ? each.value.visibility_config.metric_name : "${each.key}-metrics" # Default Metric Name Dinamico
     sampled_requests_enabled   = each.value.visibility_config.sampled_requests_enabled
   }
 
@@ -31,7 +31,7 @@ resource "aws_wafv2_web_acl" "this" {
 
   dynamic "rule" {
     for_each = each.value.managed_rules
-    
+
     content {
       name     = rule.key
       priority = rule.value.priority
@@ -71,7 +71,7 @@ resource "aws_wafv2_web_acl" "this" {
               }
             }
           }
-          
+
           # Lógica de Bot Control
 
           dynamic "managed_rule_group_configs" {
@@ -94,9 +94,9 @@ resource "aws_wafv2_web_acl" "this" {
                       for_each = rule.value.excluded_paths
                       content {
                         byte_match_statement {
-                          field_to_match { 
-                            uri_path {} 
-                          } 
+                          field_to_match {
+                            uri_path {}
+                          }
                           search_string         = statement.key
                           positional_constraint = statement.value
                           text_transformation {
@@ -128,7 +128,7 @@ resource "aws_wafv2_web_acl" "this" {
 
   dynamic "rule" {
     for_each = each.value.custom_rules
-    
+
     content {
       name     = rule.key
       priority = rule.value.priority
@@ -175,7 +175,7 @@ resource "aws_wafv2_web_acl" "this" {
         }
       }
 
-       visibility_config {
+      visibility_config {
         cloudwatch_metrics_enabled = rule.value.visibility_config.cloudwatch_metrics_enabled
         sampled_requests_enabled   = rule.value.visibility_config.sampled_requests_enabled
         metric_name = (

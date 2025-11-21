@@ -6,7 +6,7 @@ resource "aws_wafv2_web_acl_logging_configuration" "this" {
 
   dynamic "redacted_fields" {
     for_each = each.value.redacted_fields != null ? each.value.redacted_fields.headers : []
-    
+
     content {
       single_header {
         name = redacted_fields.value
@@ -16,7 +16,7 @@ resource "aws_wafv2_web_acl_logging_configuration" "this" {
 
   dynamic "redacted_fields" {
     for_each = (each.value.redacted_fields != null && try(each.value.redacted_fields.query_string, false)) ? [1] : []
-    
+
     content {
       query_string {}
     }
@@ -24,7 +24,7 @@ resource "aws_wafv2_web_acl_logging_configuration" "this" {
 
   dynamic "redacted_fields" {
     for_each = (each.value.redacted_fields != null && try(each.value.redacted_fields.uri_path, false)) ? [1] : []
-    
+
     content {
       uri_path {}
     }

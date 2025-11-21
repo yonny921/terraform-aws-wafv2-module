@@ -8,8 +8,8 @@ variable "logging_configs" {
   type = map(object({
     enabled          = optional(bool, true)
     destination_arns = list(string)
-    
-    redacted_fields  = optional(object({
+
+    redacted_fields = optional(object({
       headers      = optional(list(string), [])
       cookies      = optional(list(string), [])
       query_string = optional(bool, false)
