@@ -1,0 +1,22 @@
+# Ignorar archivos de Terraform
+*.tfstate
+*.tfstate.backup
+crash.log
+
+# Archivos locales y de trabajo
+.terraform/
+.terraform.lock.hcl
+*.tfvars
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Salidas sensibles
+terraform.tfvars
+*.auto.tfvars
+
+# Archivos de sistema
+.DS_Store
+.idea/
+.vscode/
