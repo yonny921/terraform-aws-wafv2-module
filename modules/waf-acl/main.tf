@@ -170,7 +170,7 @@ resource "aws_wafv2_web_acl" "this" {
         dynamic "ip_set_reference_statement" {
           for_each = (rule.value.ip_set_arn != null || rule.value.ip_set_key != null) ? [1] : []
           content {
-            arn = rule.value.ip_set_key != null ? var.ip_set_references[rule.value.ip_set_key] : rule.value.ip_set_arn
+            arn = rule.value.ip_set_key != null ? aws_wafv2_ip_set.this[rule.value.ip_set_key].arn : rule.value.ip_set_arn
           }
         }
       }
@@ -184,4 +184,49 @@ resource "aws_wafv2_web_acl" "this" {
       }
     }
   }
+}
+
+
+resource "aws_wafv2_web_acl_logging_configuration" "this" {
+  for_each = { for k, v in var.logging_configs : k => v if v.enabled }
+
+  log_destination_configs = each.value.destination_arns
+  resource_arn            = aws_wafv2_web_acl.this[each.key].arn
+
+  dynamic "redacted_fields" {
+    for_each = each.value.redacted_fields != null ? each.value.redacted_fields.headers : []
+
+    content {
+      single_header {
+        name = redacted_fields.value
+      }
+    }
+  }
+
+  dynamic "redacted_fields" {
+    for_each = (each.value.redacted_fields != null && try(each.value.redacted_fields.query_string, false)) ? [1] : []
+
+    content {
+      query_string {}
+    }
+  }
+
+  dynamic "redacted_fields" {
+    for_each = (each.value.redacted_fields != null && try(each.value.redacted_fields.uri_path, false)) ? [1] : []
+
+    content {
+      uri_path {}
+    }
+  }
+}
+
+
+resource "aws_wafv2_ip_set" "this" {
+  for_each = var.ip_sets_config
+
+  name               = each.key
+  description        = each.value.description
+  scope              = each.value.scope
+  ip_address_version = each.value.ip_version
+  addresses          = each.value.addresses
 }

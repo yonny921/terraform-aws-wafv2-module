@@ -1,50 +1,7 @@
-# 1. LLAMADA AL MÓDULO DE IP SETS
-
-module "ip_sets" {
-  source = "../../modules/waf-ipset"
-  scope  = "CLOUDFRONT" #REGIONAL o CLOUDFRONT
-
-  ip_sets_config = {
-    # Ip sets para bloqueo de IPs maliciosas.
-    "Black_List_Custom_Cloudfront" = {
-      description = "IPs maliciosas bloqueadas manualmente"
-      addresses   = ["203.0.113.0/24"] #lista de IPs maliciosas
-    },
-    # Ip sets para permitir IPs confiables.
-    "White_List_Custom_Cloudfront" = {
-      description = "IPs confiables permitidas manualmente"
-      addresses   = ["198.51.100.55/32"] #lista de IPs confiables
-    }
-  }
-}
-
-
-# 2. LLAMADA AL MÓDULO DE LOGS WAF
-module "waf_logging" {
-  source   = "../../modules/waf-logs"
-  waf_arns = module.waf_acl.web_acl_arns
-
-  logging_configs = {
-    #map para crear configuración de logs por WAF
-    "wafv2-cloudfront" = {
-      enabled          = true
-      destination_arns = ["arn:aws:logs:us-east-1:123456789012:log-group:aws-waf-logs-prod"] # Reemplazar con el ARN real del grupo de logs. Se debe crear previamente.
-
-      redacted_fields = {
-        headers      = ["Authorization", "X-Auth-Token"] # Ocultar secretos
-        cookies      = ["session_id"]
-        query_string = false # Ocultar parámetros GET (?user=...)
-      }
-    }
-
-  }
-}
-
-# 3. LLAMADA AL MÓDULO WAF ACL
+# 1. LLAMADA AL MÓDULO WAF ACL
 
 module "waf_acl" {
-  source            = "../../modules/waf-acl"
-  ip_set_references = module.ip_sets.arn_map
+  source            = "../../modules/waf-acl"  
 
   web_acls_config = {
     #map para crear múltiples WAFs
@@ -159,6 +116,35 @@ module "waf_acl" {
           ip_set_key  = "White_List_Custom_Cloudfront"
         }
       }
+    }
+  }
+
+  logging_configs = {
+    #map para crear configuración de logs por WAF
+    "wafv2-cloudfront" = {
+      enabled          = true
+      destination_arns = ["arn:aws:logs:us-east-1:123456789012:log-group:aws-waf-logs-prod"] # Reemplazar con el ARN real del grupo de logs. Se debe crear previamente.
+
+      redacted_fields = {
+        headers      = ["Authorization", "X-Auth-Token"] # Ocultar secretos
+        cookies      = ["session_id"]
+        query_string = false # Ocultar parámetros GET (?user=...)
+      }
+    }
+  }
+
+  ip_sets_config = {
+    # Ip sets para bloqueo de IPs maliciosas.
+    "Black_List_Custom_Cloudfront" = {
+      description = "IPs maliciosas bloqueadas manualmente"
+      addresses   = ["203.0.113.0/24"] #lista de IPs maliciosas
+      scope       = "CLOUDFRONT"
+    },
+    # Ip sets para permitir IPs confiables.
+    "White_List_Custom_Cloudfront" = {
+      description = "IPs confiables permitidas manualmente"
+      addresses   = ["198.51.100.55/32"] #lista de IPs confiables
+      scope       = "CLOUDFRONT"
     }
   }
 }

@@ -1,9 +1,3 @@
-variable "ip_set_references" {
-  description = "Mapa global de IP Sets disponibles para todos los WAFs"
-  type        = map(string)
-  default     = {}
-}
-
 variable "web_acls_config" {
   description = "Mapa de configuración para crear múltiples WAFs"
   type = map(object({
@@ -50,4 +44,32 @@ variable "web_acls_config" {
       }), {})
     })), {})
   }))
+}
+
+
+variable "ip_sets_config" {
+  description = "Mapa de configuración de IP Sets"
+  type = map(object({
+    description = optional(string, "Managed by Terraform")
+    ip_version  = optional(string, "IPV4")
+    addresses   = list(string)
+    scope       = optional(string, "REGIONAL")
+  }))
+}
+
+
+variable "logging_configs" {
+  description = "Mapa de configuración de logs por WAF"
+  type = map(object({
+    enabled          = optional(bool, true)
+    destination_arns = list(string)
+
+    redacted_fields = optional(object({
+      headers      = optional(list(string), [])
+      cookies      = optional(list(string), [])
+      query_string = optional(bool, false)
+      uri_path     = optional(bool, false)
+    }), null)
+  }))
+  default = {}
 }
