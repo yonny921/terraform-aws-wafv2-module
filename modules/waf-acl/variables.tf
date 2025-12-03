@@ -18,7 +18,14 @@ variable "web_acls_config" {
       vendor_name        = string
       rule_set_name      = string
       rule_overrides     = optional(map(string), {})
-      excluded_paths     = optional(map(string), {})
+      scope_down_statements = optional(map(object({
+        type                  = string                           # Tipo de sentencia (e.g., "NOT_BYTE_MATCH", "NOT_IP_SET_REFERENCE")
+        match_key             = optional(string)                 # Campo a chequear (e.g., "URI_PATH", "HEADER")
+        match_value           = optional(list(string))           # Valor(es) de búsqueda. Lista para GEO_MATCH, lista de 1 para Byte Match.
+        ip_set_key_ref        = optional(string)                 # Clave al IP Set local (si aplica)
+        positional_constraint = optional(string, "CONTAINS")
+        transformation_type   = optional(string, "NONE")
+      })), {})
       bot_control_config = optional(object({ inspection_level = string }))
       metric_name        = optional(string)
       visibility_config = optional(object({
@@ -51,7 +58,7 @@ variable "ip_sets_config" {
   description = "Mapa de configuración de IP Sets"
   type = map(object({
     description = optional(string, "Managed by Terraform")
-    ip_version  = optional(string, "IPV4")
+    ip_address_version  = optional(string, "IPV4")
     addresses   = list(string)
     scope       = optional(string, "REGIONAL")
   }))

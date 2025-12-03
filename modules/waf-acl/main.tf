@@ -83,27 +83,92 @@ resource "aws_wafv2_web_acl" "this" {
             }
           }
 
-          # Lógica de Scope Down
+          # Lógica de Scope Down Statements
+
           dynamic "scope_down_statement" {
-            for_each = length(rule.value.excluded_paths) > 0 ? [1] : []
+            for_each = length(rule.value.scope_down_statements) > 0 ? [1] : []
+
             content {
-              not_statement {
-                statement {
-                  or_statement {
-                    dynamic "statement" {
-                      for_each = rule.value.excluded_paths
+              and_statement {
+                dynamic "statement" {
+                  for_each = rule.value.scope_down_statements
+
+                  content {
+                    dynamic "not_statement" {
+                      for_each = contains(["NOT_BYTE_MATCH", "NOT_IP_SET_REFERENCE", "NOT_HEADER_MATCH"], statement.value.type) ? [1] : []
                       content {
-                        byte_match_statement {
-                          field_to_match {
-                            uri_path {}
+                        statement {
+                          dynamic "byte_match_statement" {
+                            for_each = contains(["NOT_BYTE_MATCH", "NOT_HEADER_MATCH"], statement.value.type) ? [1] : []
+                            content {
+                              field_to_match {
+                                dynamic "uri_path" {
+                                  for_each = statement.value.match_key == "URI_PATH" ? [1] : []
+                                  content {}
+                                }
+                                dynamic "single_header" {
+                                  for_each = statement.value.match_key == "HEADER" ? [1] : []
+                                  content {
+                                    name = statement.value.match_value
+                                  }
+                                }
+                              }
+                              search_string       =   statement.value.match_value[0]
+                              positional_constraint = statement.value.positional_constraint
+                              text_transformation {
+                                priority = 0
+                                type     = statement.value.transformation_type
+                              }
+                            }
                           }
-                          search_string         = statement.key
-                          positional_constraint = statement.value
-                          text_transformation {
-                            priority = 0
-                            type     = "NONE"
+                          dynamic "ip_set_reference_statement" {
+                            for_each = statement.value.type == "NOT_IP_SET_REFERENCE" ? [1] : []
+                            content {
+                              arn = aws_wafv2_ip_set.this[statement.value.ip_set_key_ref].arn
+                            }
                           }
                         }
+                      }
+                    }
+                      
+                    dynamic "geo_match_statement" {
+                      for_each = statement.value.type == "GEO_MATCH" ? [1] : []
+                        content {
+                          country_codes = statement.value.match_value # match_value aquí debe ser una lista de códigos de país
+                        }
+                      }
+                      
+                      # 2.2 BYTE MATCH Positivo (Para limitar la regla solo a un campo específico sin excluirlo)
+                    dynamic "byte_match_statement" {
+                      for_each = statement.value.type == "BYTE_MATCH" ? [1] : []
+                      content {
+                        field_to_match {
+                          dynamic "uri_path" {
+                            for_each = statement.value.match_key == "URI_PATH" ? [1] : []
+                            content {}
+                          }
+                          dynamic "single_header" {
+                            for_each = statement.value.match_key == "HEADER" ? [1] : []
+                            content {
+                              name = statement.value.match_value
+                            }
+                          }
+                        }
+                        search_string         = statement.value.match_value[0]
+                        positional_constraint = statement.value.positional_constraint
+                        text_transformation {
+                          priority = 0
+                          type     = statement.value.transformation_type
+                        }
+                      }
+                    }
+                          
+                          # 2.3 IP SET REFERENCE Positiva (Para limitar la regla solo a ciertas IPs)
+                    dynamic "ip_set_reference_statement" {
+                      for_each = statement.value.type == "IP_SET_REFERENCE" ? [1] : []
+                      content {
+                        # Referencia al IP Set creado localmente
+                        arn = aws_wafv2_ip_set.this[statement.value.ip_set_key_ref].arn
                       }
                     }
                   }
@@ -227,6 +292,6 @@ resource "aws_wafv2_ip_set" "this" {
   name               = each.key
   description        = each.value.description
   scope              = each.value.scope
-  ip_address_version = each.value.ip_version
+  ip_address_version = each.value.ip_address_version
   addresses          = each.value.addresses
 }

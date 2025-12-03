@@ -65,13 +65,34 @@ module "waf_acl" {
           rule_set_name  = "AWSManagedRulesSQLiRuleSet"
           metric_name    = "aws-sqli-metrics"
           rule_overrides = {}
-          excluded_paths = {
-            "/api/legacy/"   = "STARTS_WITH" # Excluye todo lo que empiece por aquí
-            "/login.php"     = "EXACTLY"     # Excluye SOLO este archivo exacto
-            "debug-mode"     = "CONTAINS"    # Excluye si la URL contiene esta palabra (CUIDADO con este)
-            "/static/images" = "STARTS_WITH"
+          scope_down_statements = {
+            "Restriccion-Geo" = {
+              type        = "GEO_MATCH"
+              match_value = ["US", "CA"] # match_value ahora acepta la lista de códigos de país
+            },
+            "Excluir-API-Legacy" = {
+              type                  = "NOT_BYTE_MATCH"
+              match_key             = "URI_PATH"
+              match_value           = ["/api/legacy/"]
+              positional_constraint = "STARTS_WITH"
+              transformation_type   = "NONE"
+            },
+            "Excluir-Login" = {
+              type                  = "NOT_BYTE_MATCH"
+              match_key             = "URI_PATH"
+              match_value           = ["/login.php"]
+              positional_constraint = "EXACTLY"
+              transformation_type   = "NONE"
+            },
+            "Excluir-Static-Images" = {
+              type                  = "NOT_BYTE_MATCH"
+              match_key             = "URI_PATH"
+              match_value           = ["/static/images"]
+              positional_constraint = "STARTS_WITH"
+              transformation_type   = "NONE"
+            }
           }
-        },
+        }
 
         "AWS-WordPress-Rule-Set" = {
           priority       = 90
