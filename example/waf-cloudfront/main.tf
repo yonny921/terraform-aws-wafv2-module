@@ -89,7 +89,12 @@ module "waf_acl" {
           priority    = 10
           action      = "block"
           metric_name = "custom-ratelimit"
-          rate_limit  = 2000
+          statements = {
+            "rate-limit" = {
+              type  = "RATE_BASED"
+              limit = 2000
+            }
+          }
         },
 
         # Custom 2: Bloqueo de países de riesgo
@@ -97,23 +102,38 @@ module "waf_acl" {
           priority    = 40
           action      = "block"
           metric_name = "custom-geoblock"
-          geo_match   = ["CN", "RU", "KP"] #Códigos de país ISO 3166-1 alpha-2
+          statements = {
+            "geo-match" = {
+              type        = "GEO_MATCH"
+              match_value = ["CN", "RU", "KP"] 
+            }
+          }
         },
 
-        # Custom 3: Bloqueo de IPs maliciosas manuales (requiere crear el IP Set antes)
+        # Custom 3: Bloqueo de IPs maliciosas manuales (Requiere IP Set)
         "Bloqueo-IPs-Manuales" = {
           priority    = 20
           action      = "block"
           metric_name = "custom-ip-block" #Referencia al IP Set creado
-          ip_set_key  = "Black_List_Custom_Cloudfront"
+          statements = {
+            "ip-block" = {
+              type         = "IP_SET_REFERENCE"
+              ip_set_key_ref = "Black_List_Custom_Cloudfront"
+            }
+          }
         },
 
-        # Custom 4: Permitir IPs confiables manuales
+        # Custom 4: Permitir IPs confiables manuales (Requiere IP Set)
         "Permitir-IPs-Confiables" = {
           priority    = 30
           action      = "allow"
           metric_name = "custom-ip-allow" #Referencia al IP Set creado
-          ip_set_key  = "White_List_Custom_Cloudfront"
+          statements = {
+            "ip-allow" = {
+              type         = "IP_SET_REFERENCE"
+              ip_set_key_ref = "White_List_Custom_Cloudfront"
+            }
+          }
         }
       }
     }

@@ -20,17 +20,14 @@ resource "aws_wafv2_web_acl" "this" {
     }
   }
 
-  dynamic visibility_config {
+  dynamic "visibility_config" {
     for_each = length(keys(each.value.visibility_config)) > 0 ? [1] : []
-      content {
-        cloudwatch_metrics_enabled = try(visibility_config.value.cloudwatch_metrics_enabled, false)
-        metric_name                = try(visibility_config.value.metric_name, "${each.key}-metrics") 
-        sampled_requests_enabled   = try(visibility_config.value.sampled_requests_enabled, true)
-      }
+    content {
+      cloudwatch_metrics_enabled = try(visibility_config.value.cloudwatch_metrics_enabled, false)
+      metric_name                = try(visibility_config.value.metric_name, "${each.key}-metrics")
+      sampled_requests_enabled   = try(visibility_config.value.sampled_requests_enabled, true)
+    }
   }
-
-
-
 
   # REGLAS ADMINISTRADAS DE AWS (MANAGED RULES)
 
@@ -51,7 +48,6 @@ resource "aws_wafv2_web_acl" "this" {
           vendor_name = rule.value.vendor_name
 
           # Logica de Rule Overrides
-
           dynamic "rule_action_override" {
             for_each = rule.value.rule_overrides
             content {
@@ -78,7 +74,6 @@ resource "aws_wafv2_web_acl" "this" {
           }
 
           # Lógica de Bot Control
-
           dynamic "managed_rule_group_configs" {
             for_each = rule.value.bot_control_config != null ? [1] : []
             content {
@@ -88,8 +83,7 @@ resource "aws_wafv2_web_acl" "this" {
             }
           }
 
-          # Lógica de Scope Down Statements
-
+          # Lógica de Scope Down Statements (Exclusión/Inclusión)
           dynamic "scope_down_statement" {
             for_each = length(rule.value.scope_down_statements) > 0 ? [1] : []
 
@@ -99,6 +93,7 @@ resource "aws_wafv2_web_acl" "this" {
                   for_each = rule.value.scope_down_statements
 
                   content {
+                    # Lógica NOT (Exclusión)
                     dynamic "not_statement" {
                       for_each = contains(["NOT_BYTE_MATCH", "NOT_IP_SET_REFERENCE", "NOT_HEADER_MATCH"], statement.value.type) ? [1] : []
                       content {
@@ -118,7 +113,7 @@ resource "aws_wafv2_web_acl" "this" {
                                   }
                                 }
                               }
-                              search_string       =   statement.value.match_value[0]
+                              search_string         = statement.value.match_value[0]
                               positional_constraint = statement.value.positional_constraint
                               text_transformation {
                                 priority = 0
@@ -135,15 +130,15 @@ resource "aws_wafv2_web_acl" "this" {
                         }
                       }
                     }
-                      
+
+                    # Lógica Positiva (GEO, BYTE, IP)
                     dynamic "geo_match_statement" {
                       for_each = statement.value.type == "GEO_MATCH" ? [1] : []
-                        content {
-                          country_codes = statement.value.match_value # match_value aquí debe ser una lista de códigos de país
-                        }
+                      content {
+                        country_codes = statement.value.match_value
                       }
-                      
-                      # 2.2 BYTE MATCH Positivo (Para limitar la regla solo a un campo específico sin excluirlo)
+                    }
+
                     dynamic "byte_match_statement" {
                       for_each = statement.value.type == "BYTE_MATCH" ? [1] : []
                       content {
@@ -153,7 +148,7 @@ resource "aws_wafv2_web_acl" "this" {
                             content {}
                           }
                           dynamic "single_header" {
-                            for_each = statement.value.match_key == "HEADER" ? [1] : []
+                            for_each = statement.value.match_key != "URI_PATH" && statement.value.match_key != null ? [1] : []
                             content {
                               name = statement.value.match_key
                             }
@@ -167,12 +162,10 @@ resource "aws_wafv2_web_acl" "this" {
                         }
                       }
                     }
-                          
-                          # 2.3 IP SET REFERENCE Positiva (Para limitar la regla solo a ciertas IPs)
+
                     dynamic "ip_set_reference_statement" {
                       for_each = statement.value.type == "IP_SET_REFERENCE" ? [1] : []
                       content {
-                        # Referencia al IP Set creado localmente
                         arn = aws_wafv2_ip_set.this[statement.value.ip_set_key_ref].arn
                       }
                     }
@@ -186,7 +179,6 @@ resource "aws_wafv2_web_acl" "this" {
 
       dynamic "visibility_config" {
         for_each = length(keys(rule.value.visibility_config)) > 0 ? [1] : []
-        
         content {
           cloudwatch_metrics_enabled = try(visibility_config.value.cloudwatch_metrics_enabled, false)
           sampled_requests_enabled   = try(visibility_config.value.sampled_requests_enabled, true)
@@ -221,31 +213,61 @@ resource "aws_wafv2_web_acl" "this" {
       }
 
       statement {
+        
+        # --- PATH 1: REGLAS DE RATE LIMITING ---
         dynamic "rate_based_statement" {
-          for_each = rule.value.rate_limit != null ? [1] : []
+          for_each = length([for k, v in rule.value.statements : k if v.type == "RATE_BASED"]) > 0 ? [1] : []
           
           content {
-            limit              = rule.value.rate_limit
+            limit              = [for k, v in rule.value.statements : v.limit if v.type == "RATE_BASED"][0]
             aggregate_key_type = "IP"
             
             dynamic "scope_down_statement" {
-              for_each = (rule.value.geo_match != null || rule.value.ip_set_key != null || rule.value.ip_set_arn != null) ? [1] : []
+              for_each = length({ for k, v in rule.value.statements : k => v if v.type != "RATE_BASED" }) > 0 ? [1] : []
               
               content {
                 and_statement { 
                   
                   dynamic "statement" {
-                    for_each = rule.value.geo_match != null ? [1] : []
+                    for_each = { for k, v in rule.value.statements : k => v if v.type != "RATE_BASED" && v.type == "GEO_MATCH" }
                     content {
-                      geo_match_statement { country_codes = rule.value.geo_match }
+                      geo_match_statement {
+                        country_codes = statement.value.match_value
+                      }
                     }
                   }
                   
                   dynamic "statement" {
-                    for_each = (rule.value.ip_set_arn != null || rule.value.ip_set_key != null) ? [1] : []
+                    for_each = { for k, v in rule.value.statements : k => v if v.type != "RATE_BASED" && v.type == "IP_SET_REFERENCE" }
                     content {
                       ip_set_reference_statement {
-                        arn = rule.value.ip_set_key != null ? aws_wafv2_ip_set.this[rule.value.ip_set_key].arn : rule.value.ip_set_arn
+                        arn = statement.value.ip_set_key_ref != null ? aws_wafv2_ip_set.this[statement.value.ip_set_key_ref].arn : statement.value.ip_set_arn
+                      }
+                    }
+                  }
+                  
+                  dynamic "statement" {
+                    for_each = { for k, v in rule.value.statements : k => v if v.type != "RATE_BASED" && v.type == "BYTE_MATCH" }
+                    content {
+                      byte_match_statement {
+                        field_to_match {
+                            dynamic "uri_path" {
+                                for_each = statement.value.match_key == "URI_PATH" ? [1] : [] 
+                                content {} 
+                            }
+                            dynamic "single_header" { 
+                                for_each = statement.value.match_key != "URI_PATH" && statement.value.match_key != null ? [1] : [] 
+                                content { 
+                                    name = statement.value.match_key 
+                                } 
+                            }
+                        }
+                        search_string         = statement.value.match_value[0]
+                        positional_constraint = statement.value.positional_constraint
+                        text_transformation {
+                            priority = 0 
+                            type     = statement.value.transformation_type 
+                        }
                       }
                     }
                   }
@@ -253,43 +275,69 @@ resource "aws_wafv2_web_acl" "this" {
               }
             }
           }
-        }
+        } 
         
+        # --- PATH 2: REGLAS ESTÁNDAR ---
         dynamic "and_statement" {
-          for_each = rule.value.rate_limit == null && (rule.value.geo_match != null || rule.value.ip_set_key != null || rule.value.ip_set_arn != null) ? [1] : []
+          for_each = length([for k, v in rule.value.statements : k if v.type == "RATE_BASED"]) == 0 && length(keys(rule.value.statements)) > 0 ? [1] : []
           
           content {
              dynamic "statement" {
-                for_each = rule.value.geo_match != null ? [1] : []
+                for_each = { for k, v in rule.value.statements : k => v if v.type == "GEO_MATCH" }
                 content {
-                    geo_match_statement { country_codes = rule.value.geo_match }
+                    geo_match_statement {
+                        country_codes = statement.value.match_value
+                    }
                 }
              }
              dynamic "statement" {
-                for_each = (rule.value.ip_set_arn != null || rule.value.ip_set_key != null) ? [1] : []
+                for_each = { for k, v in rule.value.statements : k => v if v.type == "IP_SET_REFERENCE" }
                 content {
                     ip_set_reference_statement {
-                        arn = rule.value.ip_set_key != null ? aws_wafv2_ip_set.this[rule.value.ip_set_key].arn : rule.value.ip_set_arn
+                        arn = statement.value.ip_set_key_ref != null ? aws_wafv2_ip_set.this[statement.value.ip_set_key_ref].arn : statement.value.ip_set_arn
+                    }
+                }
+             }
+             dynamic "statement" {
+                for_each = { for k, v in rule.value.statements : k => v if v.type == "BYTE_MATCH" }
+                content {
+                    byte_match_statement {
+                        field_to_match {
+                            dynamic "uri_path" {
+                                for_each = statement.value.match_key == "URI_PATH" ? [1] : [] 
+                                content {} 
+                            }
+                            dynamic "single_header" { 
+                                for_each = statement.value.match_key != "URI_PATH" && statement.value.match_key != null ? [1] : [] 
+                                content { 
+                                    name = statement.value.match_key 
+                                } 
+                            }
+                        }
+                        search_string         = statement.value.match_value[0]
+                        positional_constraint = statement.value.positional_constraint
+                        text_transformation {
+                            priority = 0 
+                            type     = statement.value.transformation_type 
+                        }
                     }
                 }
              }
           }
-        }
+        } 
       }
 
       dynamic "visibility_config" {
         for_each = length(keys(rule.value.visibility_config)) > 0 ? [1] : []
-        
         content {
           cloudwatch_metrics_enabled = try(visibility_config.value.cloudwatch_metrics_enabled, false)
-          sampled_requests_enabled   = try(visibility_config.value.visibility_config.sampled_requests_enabled, true)
+          sampled_requests_enabled   = try(visibility_config.value.sampled_requests_enabled, true)
           metric_name                = try(visibility_config.value.metric_name, rule.value.metric_name, "${rule.key}-metric")
         }
       }
     }
   }
 }
-
 
 resource "aws_wafv2_web_acl_logging_configuration" "this" {
   for_each = { for k, v in var.logging_configs : k => v if v.enabled }
@@ -299,7 +347,6 @@ resource "aws_wafv2_web_acl_logging_configuration" "this" {
 
   dynamic "redacted_fields" {
     for_each = each.value.redacted_fields != null ? each.value.redacted_fields.headers : []
-
     content {
       single_header {
         name = redacted_fields.value
@@ -309,7 +356,6 @@ resource "aws_wafv2_web_acl_logging_configuration" "this" {
 
   dynamic "redacted_fields" {
     for_each = (each.value.redacted_fields != null && try(each.value.redacted_fields.query_string, false)) ? [1] : []
-
     content {
       query_string {}
     }
@@ -317,13 +363,11 @@ resource "aws_wafv2_web_acl_logging_configuration" "this" {
 
   dynamic "redacted_fields" {
     for_each = (each.value.redacted_fields != null && try(each.value.redacted_fields.uri_path, false)) ? [1] : []
-
     content {
       uri_path {}
     }
   }
 }
-
 
 resource "aws_wafv2_ip_set" "this" {
   for_each = var.ip_sets_config

@@ -112,49 +112,73 @@ module "waf_acl" {
           priority    = 10
           action      = "block"
           metric_name = "custom-ratelimit"
-          rate_limit  = 2000
+          statements = {
+            "rate-limit" = {
+              type  = "RATE_BASED"
+              limit = 2000
+            }
+          }
         },
 
         "RateLimit-GeoBlock" = {
           priority    = 12
           action      = "block"
-          rate_limit  = 2000              # <--- Rate Limit (Activa la lógica 1)
           metric_name = "custom-combined"
-          geo_match   = ["CN", "RU"]      # <--- Geo Match (Activa el sub-statement AND)
+          statements = {
+            "rate-limit" = {
+              type  = "RATE_BASED"
+              limit = 2000
+            },
+            "geo-match" = {
+              type        = "GEO_MATCH"
+              match_value = ["CN", "RU"] 
+            }
+          }
         },
 
-        # Custom 2: Bloqueo de países de riesgo
+        # Custom 2: Bloqueo de ips maliciosas manuales (Requiere IP Set)
         "Bloqueo-IPs-Manuales" = {
           priority    = 20
           action      = "block"
           metric_name = "custom-ip-block"
-          ip_set_key  = "Black_List_Custom_Backend"
+          statements = {
+            "ip-block" = {
+              type         = "IP_SET_REFERENCE"
+              ip_set_key_ref = "Black_List_Custom_Backend" #Referencia al IP Set creado
+            }
+          }
         },
 
-        # Custom 3: Permitir IPs confiables manuales
+        # Custom 3: Permitir IPs confiables manuales (Requiere IP Set)
         "Permitir-IPs-Confiables" = {
           priority    = 30
           action      = "allow"
           metric_name = "custom-ip-allow"
-          ip_set_key  = "White_List_Custom_Backend"
+          
+          statements = {
+            "ip-allow" = {
+              type         = "IP_SET_REFERENCE"
+              ip_set_key_ref = "White_List_Custom_Backend" #Referencia al IP Set creado
+            }
+          }
         }
       }
     }
-  }
+  }    
 
   logging_configs = {
-    #map para crear configuración de logs por WAF
-    "wafv2-Backend" = {
-      enabled          = true
-      destination_arns = ["arn:aws:logs:us-east-1:123456789012:log-group:aws-waf-logs-prod"] # Reemplazar con el ARN real del grupo de logs. Se debe crear previamente.
+      #map para crear configuración de logs por WAF
+      "wafv2-Backend" = {
+        enabled          = true
+        destination_arns = ["arn:aws:logs:us-east-1:123456789012:log-group:aws-waf-logs-prod"] # Reemplazar con el ARN real del grupo de logs. Se debe crear previamente.
 
-      redacted_fields = {
-        headers      = ["Authorization", "X-Auth-Token"] # Ocultar secretos
-        cookies      = ["session_id"]
-        query_string = false # Ocultar parámetros GET (?user=...)
+        redacted_fields = {
+          headers      = ["Authorization", "X-Auth-Token"] # Ocultar secretos
+          cookies      = ["session_id"]
+          query_string = false # Ocultar parámetros GET (?user=...)
+        }
       }
     }
-  }
 
   ip_sets_config = {
     # Ip sets para bloqueo de IPs maliciosas.

@@ -39,16 +39,22 @@ variable "web_acls_config" {
     custom_rules = optional(map(object({
       priority    = number
       action      = string
-      rate_limit  = optional(number)
-      geo_match   = optional(list(string))
-      ip_set_arn  = optional(string)
-      ip_set_key  = optional(string)
       metric_name = optional(string)
       visibility_config = optional(object({
         cloudwatch_metrics_enabled = optional(bool, false)
         sampled_requests_enabled   = optional(bool, true)
         metric_name                = optional(string)
       }), {})
+      statements = optional(map(object({
+        type                  = string                           # Tipos válidos: "RATE_BASED", "GEO_MATCH", "BYTE_MATCH", "IP_SET_REFERENCE", etc.
+        limit                 = optional(number)                 # Solo si type es RATE_BASED
+        match_key             = optional(string)                 # Campo a chequear (e.g., "URI_PATH", "HEADER")
+        match_value           = optional(list(string))           # Valor(es) de búsqueda. Lista para GEO_MATCH.
+        ip_set_key_ref        = optional(string)                 # Clave al IP Set local (si aplica)
+        ip_set_arn            = optional(string)                 # ARN externo (si aplica, opcional)
+        positional_constraint = optional(string, "CONTAINS")
+        transformation_type   = optional(string, "NONE")
+      })), {})
     })), {})
   }))
 }
