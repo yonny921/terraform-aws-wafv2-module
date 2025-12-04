@@ -1,7 +1,5 @@
 resource "aws_wafv2_web_acl" "this" {
-
   # CREACION DE MULTIPLES WAF ACL
-
   for_each = var.web_acls_config
 
   name        = each.key
@@ -29,8 +27,9 @@ resource "aws_wafv2_web_acl" "this" {
     }
   }
 
-  # REGLAS ADMINISTRADAS DE AWS (MANAGED RULES)
-
+  # ---------------------------------------------------------
+  # REGLAS ADMINISTRADAS (MANAGED RULES)
+  # ---------------------------------------------------------
   dynamic "rule" {
     for_each = each.value.managed_rules
 
@@ -47,7 +46,6 @@ resource "aws_wafv2_web_acl" "this" {
           name        = rule.value.rule_set_name
           vendor_name = rule.value.vendor_name
 
-          # Logica de Rule Overrides
           dynamic "rule_action_override" {
             for_each = rule.value.rule_overrides
             content {
@@ -73,7 +71,6 @@ resource "aws_wafv2_web_acl" "this" {
             }
           }
 
-          # Lógica de Bot Control
           dynamic "managed_rule_group_configs" {
             for_each = rule.value.bot_control_config != null ? [1] : []
             content {
@@ -83,7 +80,7 @@ resource "aws_wafv2_web_acl" "this" {
             }
           }
 
-          # Lógica de Scope Down Statements (Exclusión/Inclusión)
+          # SCOPE DOWN (Exclusiones e Inclusiones)
           dynamic "scope_down_statement" {
             for_each = length(rule.value.scope_down_statements) > 0 ? [1] : []
 
@@ -93,9 +90,9 @@ resource "aws_wafv2_web_acl" "this" {
                   for_each = rule.value.scope_down_statements
 
                   content {
-                    # Lógica NOT (Exclusión)
+                    # 1. Exclusiones (NOT)
                     dynamic "not_statement" {
-                      for_each = contains(["NOT_BYTE_MATCH", "NOT_IP_SET_REFERENCE", "NOT_HEADER_MATCH"], statement.value.type) ? [1] : []
+                      for_each = contains(["NOT_BYTE_MATCH", "NOT_IP_SET_REFERENCE", "NOT_HEADER_MATCH", "NOT_REGEX_MATCH"], statement.value.type) ? [1] : []
                       content {
                         statement {
                           dynamic "byte_match_statement" {
@@ -127,18 +124,39 @@ resource "aws_wafv2_web_acl" "this" {
                               arn = aws_wafv2_ip_set.this[statement.value.ip_set_key_ref].arn
                             }
                           }
+                          dynamic "regex_pattern_set_reference_statement" {
+                            for_each = statement.value.type == "NOT_REGEX_MATCH" ? [1] : []
+                            content {
+                              arn = statement.value.regex_set_key_ref != null ? aws_wafv2_regex_pattern_set.this[statement.value.regex_set_key_ref].arn : statement.value.regex_set_arn
+                              field_to_match {
+                                dynamic "uri_path" {
+                                  for_each = statement.value.match_key == "URI_PATH" ? [1] : []
+                                  content {}
+                                }
+                                dynamic "single_header" {
+                                  for_each = statement.value.match_key != "URI_PATH" && statement.value.match_key != null ? [1] : []
+                                  content {
+                                    name = statement.value.match_key
+                                  }
+                                }
+                              }
+                              text_transformation {
+                                priority = 0
+                                type     = statement.value.transformation_type
+                              }
+                            }
+                          }
                         }
                       }
                     }
 
-                    # Lógica Positiva (GEO, BYTE, IP)
+                    # 2. Inclusiones (Positivas)
                     dynamic "geo_match_statement" {
                       for_each = statement.value.type == "GEO_MATCH" ? [1] : []
                       content {
                         country_codes = statement.value.match_value
                       }
                     }
-
                     dynamic "byte_match_statement" {
                       for_each = statement.value.type == "BYTE_MATCH" ? [1] : []
                       content {
@@ -162,11 +180,32 @@ resource "aws_wafv2_web_acl" "this" {
                         }
                       }
                     }
-
                     dynamic "ip_set_reference_statement" {
                       for_each = statement.value.type == "IP_SET_REFERENCE" ? [1] : []
                       content {
                         arn = aws_wafv2_ip_set.this[statement.value.ip_set_key_ref].arn
+                      }
+                    }
+                    dynamic "regex_pattern_set_reference_statement" {
+                      for_each = statement.value.type == "REGEX_MATCH" ? [1] : []
+                      content {
+                        arn = statement.value.regex_set_key_ref != null ? aws_wafv2_regex_pattern_set.this[statement.value.regex_set_key_ref].arn : statement.value.regex_set_arn
+                        field_to_match {
+                          dynamic "uri_path" {
+                            for_each = statement.value.match_key == "URI_PATH" ? [1] : []
+                            content {}
+                          }
+                          dynamic "single_header" {
+                            for_each = statement.value.match_key != "URI_PATH" && statement.value.match_key != null ? [1] : []
+                            content {
+                              name = statement.value.match_key
+                            }
+                          }
+                        }
+                        text_transformation {
+                          priority = 0
+                          type     = statement.value.transformation_type
+                        }
                       }
                     }
                   }
@@ -188,8 +227,9 @@ resource "aws_wafv2_web_acl" "this" {
     }
   }
 
+  # ---------------------------------------------------------
   # REGLAS CUSTOM (CUSTOM RULES)
-
+  # ---------------------------------------------------------
   dynamic "rule" {
     for_each = each.value.custom_rules
 
@@ -213,21 +253,19 @@ resource "aws_wafv2_web_acl" "this" {
       }
 
       statement {
-        
         # --- PATH 1: REGLAS DE RATE LIMITING ---
         dynamic "rate_based_statement" {
           for_each = length([for k, v in rule.value.statements : k if v.type == "RATE_BASED"]) > 0 ? [1] : []
-          
+
           content {
             limit              = [for k, v in rule.value.statements : v.limit if v.type == "RATE_BASED"][0]
             aggregate_key_type = "IP"
-            
+
             dynamic "scope_down_statement" {
               for_each = length({ for k, v in rule.value.statements : k => v if v.type != "RATE_BASED" }) > 0 ? [1] : []
-              
+
               content {
-                and_statement { 
-                  
+                and_statement {
                   dynamic "statement" {
                     for_each = { for k, v in rule.value.statements : k => v if v.type != "RATE_BASED" && v.type == "GEO_MATCH" }
                     content {
@@ -236,7 +274,6 @@ resource "aws_wafv2_web_acl" "this" {
                       }
                     }
                   }
-                  
                   dynamic "statement" {
                     for_each = { for k, v in rule.value.statements : k => v if v.type != "RATE_BASED" && v.type == "IP_SET_REFERENCE" }
                     content {
@@ -245,28 +282,51 @@ resource "aws_wafv2_web_acl" "this" {
                       }
                     }
                   }
-                  
                   dynamic "statement" {
                     for_each = { for k, v in rule.value.statements : k => v if v.type != "RATE_BASED" && v.type == "BYTE_MATCH" }
                     content {
                       byte_match_statement {
                         field_to_match {
-                            dynamic "uri_path" {
-                                for_each = statement.value.match_key == "URI_PATH" ? [1] : [] 
-                                content {} 
+                          dynamic "uri_path" {
+                            for_each = statement.value.match_key == "URI_PATH" ? [1] : []
+                            content {}
+                          }
+                          dynamic "single_header" {
+                            for_each = statement.value.match_key != "URI_PATH" && statement.value.match_key != null ? [1] : []
+                            content {
+                              name = statement.value.match_key
                             }
-                            dynamic "single_header" { 
-                                for_each = statement.value.match_key != "URI_PATH" && statement.value.match_key != null ? [1] : [] 
-                                content { 
-                                    name = statement.value.match_key 
-                                } 
-                            }
+                          }
                         }
                         search_string         = statement.value.match_value[0]
                         positional_constraint = statement.value.positional_constraint
                         text_transformation {
-                            priority = 0 
-                            type     = statement.value.transformation_type 
+                          priority = 0
+                          type     = statement.value.transformation_type
+                        }
+                      }
+                    }
+                  }
+                  dynamic "statement" {
+                    for_each = { for k, v in rule.value.statements : k => v if v.type != "RATE_BASED" && v.type == "REGEX_MATCH" }
+                    content {
+                      regex_pattern_set_reference_statement {
+                        arn = statement.value.regex_set_key_ref != null ? aws_wafv2_regex_pattern_set.this[statement.value.regex_set_key_ref].arn : statement.value.regex_set_arn
+                        field_to_match {
+                          dynamic "uri_path" {
+                            for_each = statement.value.match_key == "URI_PATH" ? [1] : []
+                            content {}
+                          }
+                          dynamic "single_header" {
+                            for_each = statement.value.match_key != "URI_PATH" && statement.value.match_key != null ? [1] : []
+                            content {
+                              name = statement.value.match_key
+                            }
+                          }
+                        }
+                        text_transformation {
+                          priority = 0
+                          type     = statement.value.transformation_type
                         }
                       }
                     }
@@ -275,56 +335,80 @@ resource "aws_wafv2_web_acl" "this" {
               }
             }
           }
-        } 
-        
+        }
+
         # --- PATH 2: REGLAS ESTÁNDAR ---
         dynamic "and_statement" {
           for_each = length([for k, v in rule.value.statements : k if v.type == "RATE_BASED"]) == 0 && length(keys(rule.value.statements)) > 0 ? [1] : []
-          
+
           content {
-             dynamic "statement" {
-                for_each = { for k, v in rule.value.statements : k => v if v.type == "GEO_MATCH" }
-                content {
-                    geo_match_statement {
-                        country_codes = statement.value.match_value
-                    }
+            dynamic "statement" {
+              for_each = { for k, v in rule.value.statements : k => v if v.type == "GEO_MATCH" }
+              content {
+                geo_match_statement {
+                  country_codes = statement.value.match_value
                 }
-             }
-             dynamic "statement" {
-                for_each = { for k, v in rule.value.statements : k => v if v.type == "IP_SET_REFERENCE" }
-                content {
-                    ip_set_reference_statement {
-                        arn = statement.value.ip_set_key_ref != null ? aws_wafv2_ip_set.this[statement.value.ip_set_key_ref].arn : statement.value.ip_set_arn
-                    }
+              }
+            }
+            dynamic "statement" {
+              for_each = { for k, v in rule.value.statements : k => v if v.type == "IP_SET_REFERENCE" }
+              content {
+                ip_set_reference_statement {
+                  arn = statement.value.ip_set_key_ref != null ? aws_wafv2_ip_set.this[statement.value.ip_set_key_ref].arn : statement.value.ip_set_arn
                 }
-             }
-             dynamic "statement" {
-                for_each = { for k, v in rule.value.statements : k => v if v.type == "BYTE_MATCH" }
-                content {
-                    byte_match_statement {
-                        field_to_match {
-                            dynamic "uri_path" {
-                                for_each = statement.value.match_key == "URI_PATH" ? [1] : [] 
-                                content {} 
-                            }
-                            dynamic "single_header" { 
-                                for_each = statement.value.match_key != "URI_PATH" && statement.value.match_key != null ? [1] : [] 
-                                content { 
-                                    name = statement.value.match_key 
-                                } 
-                            }
-                        }
-                        search_string         = statement.value.match_value[0]
-                        positional_constraint = statement.value.positional_constraint
-                        text_transformation {
-                            priority = 0 
-                            type     = statement.value.transformation_type 
-                        }
+              }
+            }
+            dynamic "statement" {
+              for_each = { for k, v in rule.value.statements : k => v if v.type == "BYTE_MATCH" }
+              content {
+                byte_match_statement {
+                  field_to_match {
+                    dynamic "uri_path" {
+                      for_each = statement.value.match_key == "URI_PATH" ? [1] : []
+                      content {}
                     }
+                    dynamic "single_header" {
+                      for_each = statement.value.match_key != "URI_PATH" && statement.value.match_key != null ? [1] : []
+                      content {
+                        name = statement.value.match_key
+                      }
+                    }
+                  }
+                  search_string         = statement.value.match_value[0]
+                  positional_constraint = statement.value.positional_constraint
+                  text_transformation {
+                    priority = 0
+                    type     = statement.value.transformation_type
+                  }
                 }
-             }
+              }
+            }
+            dynamic "statement" {
+              for_each = { for k, v in rule.value.statements : k => v if v.type == "REGEX_MATCH" }
+              content {
+                regex_pattern_set_reference_statement {
+                  arn = statement.value.regex_set_key_ref != null ? aws_wafv2_regex_pattern_set.this[statement.value.regex_set_key_ref].arn : statement.value.regex_set_arn
+                  field_to_match {
+                    dynamic "uri_path" {
+                      for_each = statement.value.match_key == "URI_PATH" ? [1] : []
+                      content {}
+                    }
+                    dynamic "single_header" {
+                      for_each = statement.value.match_key != "URI_PATH" && statement.value.match_key != null ? [1] : []
+                      content {
+                        name = statement.value.match_key
+                      }
+                    }
+                  }
+                  text_transformation {
+                    priority = 0
+                    type     = statement.value.transformation_type
+                  }
+                }
+              }
+            }
           }
-        } 
+        }
       }
 
       dynamic "visibility_config" {
@@ -377,4 +461,19 @@ resource "aws_wafv2_ip_set" "this" {
   scope              = each.value.scope
   ip_address_version = each.value.ip_address_version
   addresses          = each.value.addresses
+}
+
+resource "aws_wafv2_regex_pattern_set" "this" {
+  for_each = var.regex_sets_config
+
+  name        = each.key
+  description = each.value.description
+  scope       = each.value.scope
+
+  dynamic "regular_expression" {
+    for_each = each.value.regex_list
+    content {
+      regex_string = regular_expression.value
+    }
+  }
 }

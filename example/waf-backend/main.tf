@@ -1,7 +1,7 @@
 # 1. LLAMADA AL MÓDULO WAF ACL
 
 module "waf_acl" {
-  source            = "../../modules/waf-acl"
+  source = "../../modules/waf-acl"
 
   web_acls_config = {
     #map para crear múltiples WAFs
@@ -131,7 +131,7 @@ module "waf_acl" {
             },
             "geo-match" = {
               type        = "GEO_MATCH"
-              match_value = ["CN", "RU"] 
+              match_value = ["CN", "RU"]
             }
           }
         },
@@ -143,7 +143,7 @@ module "waf_acl" {
           metric_name = "custom-ip-block"
           statements = {
             "ip-block" = {
-              type         = "IP_SET_REFERENCE"
+              type           = "IP_SET_REFERENCE"
               ip_set_key_ref = "Black_List_Custom_Backend" #Referencia al IP Set creado
             }
           }
@@ -154,31 +154,49 @@ module "waf_acl" {
           priority    = 30
           action      = "allow"
           metric_name = "custom-ip-allow"
-          
+
           statements = {
             "ip-allow" = {
-              type         = "IP_SET_REFERENCE"
+              type           = "IP_SET_REFERENCE"
               ip_set_key_ref = "White_List_Custom_Backend" #Referencia al IP Set creado
+            }
+          }
+        }
+        "Bloqueo-Bots" = {
+          priority = 50
+          action   = "block"
+          statements = {
+            "regex-rule" = {
+              type              = "REGEX_MATCH"
+              regex_set_key_ref = "Bad-Bots-Set"
+              match_key         = "User-Agent" # Buscar en el Header User-Agent
             }
           }
         }
       }
     }
-  }    
+  }
+
+  regex_sets_config = {
+    "Bad-Bots-Set" = {
+      regex_list = ["^BadBot.*", ".*Scraper.*"]
+    }
+  }
+
 
   logging_configs = {
-      #map para crear configuración de logs por WAF
-      "wafv2-Backend" = {
-        enabled          = true
-        destination_arns = ["arn:aws:logs:us-east-1:123456789012:log-group:aws-waf-logs-prod"] # Reemplazar con el ARN real del grupo de logs. Se debe crear previamente.
+    #map para crear configuración de logs por WAF
+    "wafv2-Backend" = {
+      enabled          = true
+      destination_arns = ["arn:aws:logs:us-east-1:123456789012:log-group:aws-waf-logs-prod"] # Reemplazar con el ARN real del grupo de logs. Se debe crear previamente.
 
-        redacted_fields = {
-          headers      = ["Authorization", "X-Auth-Token"] # Ocultar secretos
-          cookies      = ["session_id"]
-          query_string = false # Ocultar parámetros GET (?user=...)
-        }
+      redacted_fields = {
+        headers      = ["Authorization", "X-Auth-Token"] # Ocultar secretos
+        cookies      = ["session_id"]
+        query_string = false # Ocultar parámetros GET (?user=...)
       }
     }
+  }
 
   ip_sets_config = {
     # Ip sets para bloqueo de IPs maliciosas.

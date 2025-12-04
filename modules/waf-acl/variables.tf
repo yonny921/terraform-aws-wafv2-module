@@ -14,15 +14,18 @@ variable "web_acls_config" {
 
 
     managed_rules = optional(map(object({
-      priority           = number
-      vendor_name        = string
-      rule_set_name      = string
-      rule_overrides     = optional(map(string), {})
+      priority       = number
+      vendor_name    = string
+      rule_set_name  = string
+      rule_overrides = optional(map(string), {})
       scope_down_statements = optional(map(object({
-        type                  = string                           # Tipo de sentencia (e.g., "NOT_BYTE_MATCH", "NOT_IP_SET_REFERENCE")
-        match_key             = optional(string)                 # Campo a chequear (e.g., "URI_PATH", "HEADER")
-        match_value           = optional(list(string))           # Valor(es) de búsqueda. Lista para GEO_MATCH, lista de 1 para Byte Match.
-        ip_set_key_ref        = optional(string)                 # Clave al IP Set local (si aplica)
+        type                  = string                 # Tipo de sentencia (e.g., "NOT_BYTE_MATCH", "NOT_IP_SET_REFERENCE")
+        match_key             = optional(string)       # Campo a chequear (e.g., "URI_PATH", "HEADER")
+        match_value           = optional(list(string)) # Valor(es) de búsqueda. Lista para GEO_MATCH, lista de 1 para Byte Match.
+        ip_set_key_ref        = optional(string)       # Clave al IP Set local (si aplica)
+        ip_set_arn            = optional(string)       # ARN externo (si aplica, opcional)
+        regex_set_key_ref     = optional(string)       # Referencia a un Regex Set creado en este módulo
+        regex_set_arn         = optional(string)       # Referencia a un ARN externo para Regex Set
         positional_constraint = optional(string, "CONTAINS")
         transformation_type   = optional(string, "NONE")
       })), {})
@@ -46,12 +49,14 @@ variable "web_acls_config" {
         metric_name                = optional(string)
       }), {})
       statements = optional(map(object({
-        type                  = string                           # Tipos válidos: "RATE_BASED", "GEO_MATCH", "BYTE_MATCH", "IP_SET_REFERENCE", etc.
-        limit                 = optional(number)                 # Solo si type es RATE_BASED
-        match_key             = optional(string)                 # Campo a chequear (e.g., "URI_PATH", "HEADER")
-        match_value           = optional(list(string))           # Valor(es) de búsqueda. Lista para GEO_MATCH.
-        ip_set_key_ref        = optional(string)                 # Clave al IP Set local (si aplica)
-        ip_set_arn            = optional(string)                 # ARN externo (si aplica, opcional)
+        type                  = string                 # Soporta: "BYTE_MATCH", "SQLI_MATCH", "XSS_MATCH", "SIZE_CONSTRAINT", "GEO_MATCH", "IP_SET_REFERENCE", "RATE_BASED"
+        limit                 = optional(number)       # Solo si type es RATE_BASED
+        match_key             = optional(string)       # Soporta: "URI_PATH", "QUERY_STRING", "HEADER", "METHOD", "BODY", "SINGLE_QUERY_ARG", "ALL_QUERY_ARGS", "COUNTRY"
+        match_value           = optional(list(string)) # Soporta lista para GEO_MATCH, lista de 1 para Byte Match.
+        ip_set_key_ref        = optional(string)       # Clave al IP Set local (si aplica)
+        ip_set_arn            = optional(string)       # ARN externo (si aplica, opcional)
+        regex_set_key_ref     = optional(string)       # Referencia a un Regex Set creado en este módulo
+        regex_set_arn         = optional(string)       # Referencia a un ARN externo para Regex Set
         positional_constraint = optional(string, "CONTAINS")
         transformation_type   = optional(string, "NONE")
       })), {})
@@ -60,14 +65,25 @@ variable "web_acls_config" {
 }
 
 
+variable "regex_sets_config" {
+  description = "(Opcional) Configuración de Regex Pattern Sets"
+  type = map(object({
+    description = optional(string, "Regex Pattern Set managed by Terraform")
+    scope       = optional(string, "REGIONAL")
+    regex_list  = list(string)
+  }))
+  default = {}
+}
+
 variable "ip_sets_config" {
   description = "Mapa de configuración de IP Sets"
   type = map(object({
-    description = optional(string, "Managed by Terraform")
-    ip_address_version  = optional(string, "IPV4")
-    addresses   = list(string)
-    scope       = optional(string, "REGIONAL")
+    description        = optional(string, "Ip Set managed by Terraform")
+    ip_address_version = optional(string, "IPV4")
+    addresses          = list(string)
+    scope              = optional(string, "REGIONAL")
   }))
+  default = {}
 }
 
 
@@ -76,7 +92,6 @@ variable "logging_configs" {
   type = map(object({
     enabled          = optional(bool, true)
     destination_arns = list(string)
-
     redacted_fields = optional(object({
       headers      = optional(list(string), [])
       cookies      = optional(list(string), [])
