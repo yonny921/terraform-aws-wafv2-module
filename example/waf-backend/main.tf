@@ -115,6 +115,14 @@ module "waf_acl" {
           rate_limit  = 2000
         },
 
+        "RateLimit-GeoBlock" = {
+          priority    = 12
+          action      = "block"
+          rate_limit  = 2000              # <--- Rate Limit (Activa la lógica 1)
+          metric_name = "custom-combined"
+          geo_match   = ["CN", "RU"]      # <--- Geo Match (Activa el sub-statement AND)
+        },
+
         # Custom 2: Bloqueo de países de riesgo
         "Bloqueo-IPs-Manuales" = {
           priority    = 20

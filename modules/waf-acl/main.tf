@@ -20,11 +20,16 @@ resource "aws_wafv2_web_acl" "this" {
     }
   }
 
-  visibility_config {
-    cloudwatch_metrics_enabled = each.value.visibility_config.cloudwatch_metrics_enabled
-    metric_name                = each.value.visibility_config.metric_name != null ? each.value.visibility_config.metric_name : "${each.key}-metrics" # Default Metric Name Dinamico
-    sampled_requests_enabled   = each.value.visibility_config.sampled_requests_enabled
+  dynamic visibility_config {
+    for_each = length(keys(each.value.visibility_config)) > 0 ? [1] : []
+      content {
+        cloudwatch_metrics_enabled = try(visibility_config.value.cloudwatch_metrics_enabled, false)
+        metric_name                = try(visibility_config.value.metric_name, "${each.key}-metrics") 
+        sampled_requests_enabled   = try(visibility_config.value.sampled_requests_enabled, true)
+      }
   }
+
+
 
 
   # REGLAS ADMINISTRADAS DE AWS (MANAGED RULES)
@@ -107,9 +112,9 @@ resource "aws_wafv2_web_acl" "this" {
                                   content {}
                                 }
                                 dynamic "single_header" {
-                                  for_each = statement.value.match_key == "HEADER" ? [1] : []
+                                  for_each = statement.value.match_key != "URI_PATH" && statement.value.match_key != null ? [1] : []
                                   content {
-                                    name = statement.value.match_value
+                                    name = statement.value.match_key
                                   }
                                 }
                               }
@@ -150,7 +155,7 @@ resource "aws_wafv2_web_acl" "this" {
                           dynamic "single_header" {
                             for_each = statement.value.match_key == "HEADER" ? [1] : []
                             content {
-                              name = statement.value.match_value
+                              name = statement.value.match_key
                             }
                           }
                         }
@@ -179,12 +184,14 @@ resource "aws_wafv2_web_acl" "this" {
         }
       }
 
-      visibility_config {
-        cloudwatch_metrics_enabled = rule.value.visibility_config.cloudwatch_metrics_enabled
-        sampled_requests_enabled   = rule.value.visibility_config.sampled_requests_enabled
-        metric_name = (
-          rule.value.visibility_config.metric_name != null ? rule.value.visibility_config.metric_name : (rule.value.metric_name != null ? rule.value.metric_name : "${rule.key}-metric")
-        )
+      dynamic "visibility_config" {
+        for_each = length(keys(rule.value.visibility_config)) > 0 ? [1] : []
+        
+        content {
+          cloudwatch_metrics_enabled = try(visibility_config.value.cloudwatch_metrics_enabled, false)
+          sampled_requests_enabled   = try(visibility_config.value.sampled_requests_enabled, true)
+          metric_name                = try(visibility_config.value.metric_name, rule.value.metric_name, "${rule.key}-metric")
+        }
       }
     }
   }
@@ -214,38 +221,70 @@ resource "aws_wafv2_web_acl" "this" {
       }
 
       statement {
-        # Rate Limit
         dynamic "rate_based_statement" {
           for_each = rule.value.rate_limit != null ? [1] : []
+          
           content {
             limit              = rule.value.rate_limit
             aggregate_key_type = "IP"
+            
+            dynamic "scope_down_statement" {
+              for_each = (rule.value.geo_match != null || rule.value.ip_set_key != null || rule.value.ip_set_arn != null) ? [1] : []
+              
+              content {
+                and_statement { 
+                  
+                  dynamic "statement" {
+                    for_each = rule.value.geo_match != null ? [1] : []
+                    content {
+                      geo_match_statement { country_codes = rule.value.geo_match }
+                    }
+                  }
+                  
+                  dynamic "statement" {
+                    for_each = (rule.value.ip_set_arn != null || rule.value.ip_set_key != null) ? [1] : []
+                    content {
+                      ip_set_reference_statement {
+                        arn = rule.value.ip_set_key != null ? aws_wafv2_ip_set.this[rule.value.ip_set_key].arn : rule.value.ip_set_arn
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
-
-        # Geo Match
-        dynamic "geo_match_statement" {
-          for_each = rule.value.geo_match != null ? [1] : []
+        
+        dynamic "and_statement" {
+          for_each = rule.value.rate_limit == null && (rule.value.geo_match != null || rule.value.ip_set_key != null || rule.value.ip_set_arn != null) ? [1] : []
+          
           content {
-            country_codes = rule.value.geo_match
-          }
-        }
-
-        # IP Set Reference
-        dynamic "ip_set_reference_statement" {
-          for_each = (rule.value.ip_set_arn != null || rule.value.ip_set_key != null) ? [1] : []
-          content {
-            arn = rule.value.ip_set_key != null ? aws_wafv2_ip_set.this[rule.value.ip_set_key].arn : rule.value.ip_set_arn
+             dynamic "statement" {
+                for_each = rule.value.geo_match != null ? [1] : []
+                content {
+                    geo_match_statement { country_codes = rule.value.geo_match }
+                }
+             }
+             dynamic "statement" {
+                for_each = (rule.value.ip_set_arn != null || rule.value.ip_set_key != null) ? [1] : []
+                content {
+                    ip_set_reference_statement {
+                        arn = rule.value.ip_set_key != null ? aws_wafv2_ip_set.this[rule.value.ip_set_key].arn : rule.value.ip_set_arn
+                    }
+                }
+             }
           }
         }
       }
 
-      visibility_config {
-        cloudwatch_metrics_enabled = rule.value.visibility_config.cloudwatch_metrics_enabled
-        sampled_requests_enabled   = rule.value.visibility_config.sampled_requests_enabled
-        metric_name = (
-          rule.value.visibility_config.metric_name != null ? rule.value.visibility_config.metric_name : (rule.value.metric_name != null ? rule.value.metric_name : "${rule.key}-metric")
-        )
+      dynamic "visibility_config" {
+        for_each = length(keys(rule.value.visibility_config)) > 0 ? [1] : []
+        
+        content {
+          cloudwatch_metrics_enabled = try(visibility_config.value.cloudwatch_metrics_enabled, false)
+          sampled_requests_enabled   = try(visibility_config.value.visibility_config.sampled_requests_enabled, true)
+          metric_name                = try(visibility_config.value.metric_name, rule.value.metric_name, "${rule.key}-metric")
+        }
       }
     }
   }
