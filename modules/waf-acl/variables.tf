@@ -8,6 +8,11 @@ variable "web_acls_config" {
     default_action = optional(string, "allow")    # Puede ser ALLOW o BLOCK, por defecto es ALLOW
     tags           = optional(map(string), {})
 
+    custom_response_bodies = optional(map(object({
+      content_type = string
+      content      = string
+    })), {})
+
     visibility_config = optional(object({
       cloudwatch_metrics_enabled = optional(bool, false)
       sampled_requests_enabled   = optional(bool, true)
@@ -46,6 +51,10 @@ variable "web_acls_config" {
       priority    = number
       action      = string
       metric_name = optional(string)
+      response_config = optional(object({
+        response_code            = number
+        custom_response_body_key = optional(string)
+      }))
       visibility_config = optional(object({
         cloudwatch_metrics_enabled = optional(bool, false)
         sampled_requests_enabled   = optional(bool, true)

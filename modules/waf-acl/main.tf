@@ -33,6 +33,15 @@ resource "aws_wafv2_web_acl" "this" {
     }
   }
 
+  dynamic "custom_response_body" {
+    for_each = each.value.custom_response_bodies
+    content {
+      key          = custom_response_body.key
+      content      = custom_response_body.value.content
+      content_type = custom_response_body.value.content_type
+    }
+  }
+
   # Reglas Administradas (Managed Rules)
   dynamic "rule" {
     for_each = each.value.managed_rules
@@ -113,11 +122,11 @@ resource "aws_wafv2_web_acl" "this" {
                             content {
                               field_to_match {
                                 dynamic "uri_path" {
-                                  for_each = statement.value.match_key == "URI_PATH" ? [1] : []
+                                  for_each = try(upper(statement.value.match_key), "URI_PATH") == "URI_PATH" ? [1] : []
                                   content {}
                                 }
                                 dynamic "single_header" {
-                                  for_each = statement.value.match_key != "URI_PATH" && statement.value.match_key != null ? [1] : []
+                                  for_each = try(upper(statement.value.match_key), "URI_PATH") != "URI_PATH" && statement.value.match_key != null ? [1] : []
                                   content {
                                     name = statement.value.match_key
                                   }
@@ -143,11 +152,11 @@ resource "aws_wafv2_web_acl" "this" {
                               arn = statement.value.regex_set_key_ref != null ? aws_wafv2_regex_pattern_set.this[statement.value.regex_set_key_ref].arn : statement.value.regex_set_arn
                               field_to_match {
                                 dynamic "uri_path" {
-                                  for_each = statement.value.match_key == "URI_PATH" ? [1] : []
+                                  for_each = try(upper(statement.value.match_key), "URI_PATH") == "URI_PATH" ? [1] : []
                                   content {}
                                 }
                                 dynamic "single_header" {
-                                  for_each = statement.value.match_key != "URI_PATH" && statement.value.match_key != null ? [1] : []
+                                  for_each = try(upper(statement.value.match_key), "URI_PATH") != "URI_PATH" && statement.value.match_key != null ? [1] : []
                                   content {
                                     name = statement.value.match_key
                                   }
@@ -175,11 +184,11 @@ resource "aws_wafv2_web_acl" "this" {
                       content {
                         field_to_match {
                           dynamic "uri_path" {
-                            for_each = upper(statement.value.match_key) == "URI_PATH" ? [1] : []
+                            for_each = try(upper(statement.value.match_key), "URI_PATH") == "URI_PATH" ? [1] : []
                             content {}
                           }
                           dynamic "single_header" {
-                            for_each = upper(statement.value.match_key) != "URI_PATH" && upper(statement.value.match_key) != null ? [1] : []
+                            for_each = try(upper(statement.value.match_key), "URI_PATH") != "URI_PATH" && upper(statement.value.match_key) != null ? [1] : []
                             content {
                               name = statement.value.match_key
                             }
@@ -205,11 +214,11 @@ resource "aws_wafv2_web_acl" "this" {
                         arn = statement.value.regex_set_key_ref != null ? aws_wafv2_regex_pattern_set.this[statement.value.regex_set_key_ref].arn : statement.value.regex_set_arn
                         field_to_match {
                           dynamic "uri_path" {
-                            for_each = statement.value.match_key == "URI_PATH" ? [1] : []
+                            for_each = try(upper(statement.value.match_key), "URI_PATH") == "URI_PATH" ? [1] : []
                             content {}
                           }
                           dynamic "single_header" {
-                            for_each = statement.value.match_key != "URI_PATH" && statement.value.match_key != null ? [1] : []
+                            for_each = try(upper(statement.value.match_key), "URI_PATH") != "URI_PATH" && statement.value.match_key != null ? [1] : []
                             content {
                               name = statement.value.match_key
                             }
@@ -251,7 +260,15 @@ resource "aws_wafv2_web_acl" "this" {
       action {
         dynamic "block" {
           for_each = rule.value.action == "block" ? [1] : []
-          content {}
+          content {
+            dynamic "custom_response" {
+              for_each = try(rule.value.response_config.custom_response_body_key, null) != null ? [1] : []
+              content {
+                response_code            = rule.value.response_config.response_code
+                custom_response_body_key = rule.value.response_config.custom_response_body_key
+              }
+            }
+          }
         }
         dynamic "allow" {
           for_each = rule.value.action == "allow" ? [1] : []
@@ -299,11 +316,11 @@ resource "aws_wafv2_web_acl" "this" {
                       byte_match_statement {
                         field_to_match {
                           dynamic "uri_path" {
-                            for_each = statement.value.match_key == "URI_PATH" ? [1] : []
+                            for_each = try(upper(statement.value.match_key), "URI_PATH") == "URI_PATH" ? [1] : []
                             content {}
                           }
                           dynamic "single_header" {
-                            for_each = statement.value.match_key != "URI_PATH" && statement.value.match_key != null ? [1] : []
+                            for_each = try(upper(statement.value.match_key), "URI_PATH") != "URI_PATH" && upper(statement.value.match_key) != null ? [1] : []
                             content {
                               name = statement.value.match_key
                             }
@@ -325,11 +342,11 @@ resource "aws_wafv2_web_acl" "this" {
                         arn = statement.value.regex_set_key_ref != null ? aws_wafv2_regex_pattern_set.this[statement.value.regex_set_key_ref].arn : statement.value.regex_set_arn
                         field_to_match {
                           dynamic "uri_path" {
-                            for_each = statement.value.match_key == "URI_PATH" ? [1] : []
+                            for_each = try(upper(statement.value.match_key), "URI_PATH") == "URI_PATH" ? [1] : []
                             content {}
                           }
                           dynamic "single_header" {
-                            for_each = statement.value.match_key != "URI_PATH" && statement.value.match_key != null ? [1] : []
+                            for_each = try(upper(statement.value.match_key), "URI_PATH") != "URI_PATH" && upper(statement.value.match_key) != null ? [1] : []
                             content {
                               name = statement.value.match_key
                             }
@@ -375,11 +392,11 @@ resource "aws_wafv2_web_acl" "this" {
                 byte_match_statement {
                   field_to_match {
                     dynamic "uri_path" {
-                      for_each = statement.value.match_key == "URI_PATH" ? [1] : []
+                      for_each = try(upper(statement.value.match_key), "URI_PATH") == "URI_PATH" ? [1] : []
                       content {}
                     }
                     dynamic "single_header" {
-                      for_each = statement.value.match_key != "URI_PATH" && statement.value.match_key != null ? [1] : []
+                      for_each = try(upper(statement.value.match_key), "URI_PATH") != "URI_PATH" && statement.value.match_key != null ? [1] : []
                       content {
                         name = statement.value.match_key
                       }
@@ -401,11 +418,11 @@ resource "aws_wafv2_web_acl" "this" {
                   arn = statement.value.regex_set_key_ref != null ? aws_wafv2_regex_pattern_set.this[statement.value.regex_set_key_ref].arn : statement.value.regex_set_arn
                   field_to_match {
                     dynamic "uri_path" {
-                      for_each = statement.value.match_key == "URI_PATH" ? [1] : []
+                      for_each = try(upper(statement.value.match_key), "URI_PATH") == "URI_PATH" ? [1] : []
                       content {}
                     }
                     dynamic "single_header" {
-                      for_each = statement.value.match_key != "URI_PATH" && statement.value.match_key != null ? [1] : []
+                      for_each = try(upper(statement.value.match_key), "URI_PATH") != "URI_PATH" && statement.value.match_key != null ? [1] : []
                       content {
                         name = statement.value.match_key
                       }

@@ -33,6 +33,17 @@ module "waf_acl" {
 
       # Multiples reglas administradas (Managed Rules) 
 
+      custom_response_bodies = {
+        "JSON-Access-Denied" = {
+          content      = "{\"error\": \"Acceso denegado por WAF\", \"code\": 403}"
+          content_type = "APPLICATION_JSON"
+        }
+        "JSON-Rate-Limit" = {
+          content      = "{\"error\": \"Demasiadas solicitudes. Calma.\", \"retry_after\": 60}"
+          content_type = "APPLICATION_JSON"
+        }
+      }
+
       managed_rules = {
 
         "AWS-Common" = {
@@ -97,6 +108,10 @@ module "waf_acl" {
           priority    = 10
           action      = "block"
           metric_name = "custom-ratelimit"
+          response_config = {
+            response_code            = 429 # Too Many Requests
+            custom_response_body_key = "JSON-Rate-Limit"
+          }
           statements = {
             "rate-limit" = {
               type  = "RATE_BASED"
