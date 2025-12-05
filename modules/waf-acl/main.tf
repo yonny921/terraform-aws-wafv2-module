@@ -259,7 +259,7 @@ resource "aws_wafv2_web_acl" "this" {
 
       action {
         dynamic "block" {
-          for_each = rule.value.action == "block" ? [1] : []
+          for_each = lower(rule.value.action) == "block" ? [1] : []
           content {
             dynamic "custom_response" {
               for_each = try(rule.value.response_config.custom_response_body_key, null) != null ? [1] : []
@@ -271,11 +271,11 @@ resource "aws_wafv2_web_acl" "this" {
           }
         }
         dynamic "allow" {
-          for_each = rule.value.action == "allow" ? [1] : []
+          for_each = lower(rule.value.action) == "allow" ? [1] : []
           content {}
         }
         dynamic "count" {
-          for_each = rule.value.action == "count" ? [1] : []
+          for_each = lower(rule.value.action) == "count" ? [1] : []
           content {}
         }
       }
