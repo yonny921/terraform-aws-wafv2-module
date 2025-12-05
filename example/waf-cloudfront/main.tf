@@ -1,7 +1,14 @@
-# 1. LLAMADA AL MÓDULO WAF ACL
+#Uso del módulo WAFv2 para crear ACLs, reglas administradas y personalizadas, sets de regex e IPs, y configuración de logs.
 
 module "waf_acl" {
-  source            = "../../modules/waf-acl"  
+  source = "../../modules/waf-acl"
+
+  # 1. Tags Globales (Se aplican a TODO: WAF, IPs, Regex)
+  tags = {
+    Environment = "Prod"
+    Terraform   = "True"
+    Owner       = "DevOps Team"
+  }
 
   web_acls_config = {
     #map para crear múltiples WAFs
@@ -11,9 +18,10 @@ module "waf_acl" {
       default_action = "ALLOW"
 
       tags = {
-        Environment = "Development"
-        Project     = "WAFv2-IAC"
+        Project = "WAFv2-IAC"
       }
+
+      # Se puede descomentar para habilitar métricas CloudWatch
 
       /*
       visibility_config = {
@@ -105,7 +113,7 @@ module "waf_acl" {
           statements = {
             "geo-match" = {
               type        = "GEO_MATCH"
-              match_value = ["CN", "RU", "KP"] 
+              match_value = ["CN", "RU", "KP"]
             }
           }
         },
@@ -117,7 +125,7 @@ module "waf_acl" {
           metric_name = "custom-ip-block" #Referencia al IP Set creado
           statements = {
             "ip-block" = {
-              type         = "IP_SET_REFERENCE"
+              type           = "IP_SET_REFERENCE"
               ip_set_key_ref = "Black_List_Custom_Cloudfront"
             }
           }
@@ -130,7 +138,7 @@ module "waf_acl" {
           metric_name = "custom-ip-allow" #Referencia al IP Set creado
           statements = {
             "ip-allow" = {
-              type         = "IP_SET_REFERENCE"
+              type           = "IP_SET_REFERENCE"
               ip_set_key_ref = "White_List_Custom_Cloudfront"
             }
           }
@@ -149,6 +157,19 @@ module "waf_acl" {
         headers      = ["Authorization", "X-Auth-Token"] # Ocultar secretos
         cookies      = ["session_id"]
         query_string = false # Ocultar parámetros GET (?user=...)
+      }
+
+      logging_filter = {
+        default_behavior = "DROP" #puede ser DROP o KEEP
+        filters = {
+          "guardar-bloqueos" = {
+            behavior    = "KEEP"
+            requirement = "MEETS_ANY" #puede ser MEETS_ALL o MEETS_ANY
+            conditions = [
+              { action = "BLOCK" } #puede ser ALLOW, BLOCK o COUNT
+            ]
+          }
+        }
       }
     }
   }

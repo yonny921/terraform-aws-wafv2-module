@@ -1,19 +1,27 @@
-# 1. LLAMADA AL MÓDULO WAF ACL
+#Uso del módulo WAFv2 para crear ACLs, reglas administradas y personalizadas, sets de regex e IPs, y configuración de logs.
 
 module "waf_acl" {
   source = "../../modules/waf-acl"
 
+  # 1. Tags Globales (Se aplican a TODO: WAF, IPs, Regex)
+  tags = {
+    Environment = "Prod"
+    Terraform   = "True"
+    Owner       = "DevOps Team"
+  }
+
   web_acls_config = {
     #map para crear múltiples WAFs
     "wafv2-Backend" = {
-      scope          = "REGIONAL" #REGIONAL o CLOUDFRONT
+      scope          = "REGIONAL" #puede ser CLOUDFRONT o REGIONAL
       description    = "WAFv2 de prueba IAC"
-      default_action = "ALLOW"
+      default_action = "ALLOW" #puede ser ALLOW, BLOCK
 
       tags = {
-        Environment = "Development"
-        Project     = "WAFv2-IAC"
+        Project = "WAFv2-IAC"
       }
+
+      # Se puede descomentar para habilitar métricas CloudWatch
 
       /*
       visibility_config = {
@@ -179,10 +187,11 @@ module "waf_acl" {
 
   regex_sets_config = {
     "Bad-Bots-Set" = {
-      regex_list = ["^BadBot.*", ".*Scraper.*"]
+      regex_list  = ["^BadBot.*", ".*Scraper.*"]
+      description = "Regex set para identificar Bad Bots en User-Agent"
+      scope       = "REGIONAL"
     }
   }
-
 
   logging_configs = {
     #map para crear configuración de logs por WAF
@@ -195,8 +204,22 @@ module "waf_acl" {
         cookies      = ["session_id"]
         query_string = false # Ocultar parámetros GET (?user=...)
       }
+
+      logging_filter = {
+        default_behavior = "DROP" #puede ser DROP o KEEP
+        filters = {
+          "guardar-bloqueos" = {
+            behavior    = "KEEP"
+            requirement = "MEETS_ANY" #puede ser MEETS_ALL o MEETS_ANY
+            conditions = [
+              { action = "BLOCK" } #puede ser ALLOW, BLOCK o COUNT
+            ]
+          }
+        }
+      }
     }
   }
+
 
   ip_sets_config = {
     # Ip sets para bloqueo de IPs maliciosas.
